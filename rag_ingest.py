@@ -103,7 +103,7 @@ def check_openai_embeddings_working(client: openai.OpenAI) -> bool:
         return True
     except Exception as exc:
         print(
-            f"[RAG INGEST] OpenAI embedding probe failed ({exc!r}) — "
+            f"[RAG INGEST] OpenAI embedding probe failed ({exc!r}) - "
             "will not use OpenAI for embeddings."
         )
         return False
@@ -137,7 +137,7 @@ def resolve_embedding_provider(openai_client: Optional[openai.OpenAI]) -> tuple[
     key = os.getenv("OPENAI_API_KEY", "").strip()
     if not key:
         msg = (
-            f"[RAG INGEST] OPENAI_API_KEY not set → using explicit fallback: "
+            f"[RAG INGEST] OPENAI_API_KEY not set -> using explicit fallback: "
             f"{LOCAL_EMBED_MODEL}"
         )
         print(msg)
@@ -145,19 +145,19 @@ def resolve_embedding_provider(openai_client: Optional[openai.OpenAI]) -> tuple[
 
     if openai_client is None:
         print(
-            f"[RAG INGEST] OpenAI client unavailable → explicit fallback: {LOCAL_EMBED_MODEL}"
+            f"[RAG INGEST] OpenAI client unavailable -> explicit fallback: {LOCAL_EMBED_MODEL}"
         )
         return False, ""
 
     if check_openai_embeddings_working(openai_client):
         msg = (
-            f"[RAG INGEST] Embedding provider: OpenAI ({OPENAI_EMBED_MODEL}) — key valid."
+            f"[RAG INGEST] Embedding provider: OpenAI ({OPENAI_EMBED_MODEL}) - key valid."
         )
         print(msg)
         return True, msg
 
     print(
-        f"[RAG INGEST] OPENAI_API_KEY present but embeddings not usable → "
+        f"[RAG INGEST] OPENAI_API_KEY present but embeddings not usable -> "
         f"explicit fallback: {LOCAL_EMBED_MODEL}"
     )
     return False, ""

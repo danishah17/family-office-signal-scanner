@@ -76,6 +76,8 @@ copy .env.example .env
 
 ### Index the dataset for RAG
 
+If `OPENAI_API_KEY` in `.env` is missing or invalid, ingestion uses the local embedding model `sentence-transformers/all-MiniLM-L6-v2` (same as the query path). Fix the key if you want OpenAI embeddings.
+
 ```powershell
 python rag_ingest.py
 ```

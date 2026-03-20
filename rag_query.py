@@ -47,7 +47,7 @@ def check_openai_embeddings_working(client: openai.OpenAI) -> bool:
         return True
     except Exception as exc:
         print(
-            f"[RAG QUERY] OpenAI embedding probe failed ({exc!r}) — "
+            f"[RAG QUERY] OpenAI embedding probe failed ({exc!r}) - "
             "using explicit local fallback."
         )
         return False
@@ -112,13 +112,13 @@ class FamilyOfficeRAG:
         if not key:
             self._use_openai_embeddings = False
             self.embedding_provider_label = f"explicit fallback: {LOCAL_EMBED_MODEL}"
-            print(f"[RAG QUERY] OPENAI_API_KEY not set → {self.embedding_provider_label}")
+            print(f"[RAG QUERY] OPENAI_API_KEY not set -> {self.embedding_provider_label}")
             return
 
         if self.openai_client is None:
             self._use_openai_embeddings = False
             self.embedding_provider_label = f"explicit fallback: {LOCAL_EMBED_MODEL}"
-            print("[RAG QUERY] OpenAI client missing → " + self.embedding_provider_label)
+            print("[RAG QUERY] OpenAI client missing -> " + self.embedding_provider_label)
             return
 
         if check_openai_embeddings_working(self.openai_client):
@@ -130,7 +130,7 @@ class FamilyOfficeRAG:
         self._use_openai_embeddings = False
         self.embedding_provider_label = f"explicit fallback: {LOCAL_EMBED_MODEL}"
         print(
-            f"[RAG QUERY] OpenAI unavailable → {self.embedding_provider_label} "
+            f"[RAG QUERY] OpenAI unavailable -> {self.embedding_provider_label} "
             "(must match ingest embedding model for quality)."
         )
 
