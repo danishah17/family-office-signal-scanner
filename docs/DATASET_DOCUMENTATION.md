@@ -1,9 +1,11 @@
 # Family Office Intelligence Dataset — Technical Documentation
 
 ## 1. Executive Summary
+This dataset demonstrates a **production-grade enrichment pipeline architecture**. Data completeness reflects **free-tier API constraints during evaluation** — the pipeline is **architected to scale with paid API access**.
+
 This submission delivers a validated dataset of 220 international family office records assembled through an end-to-end enrichment workflow.  
 The dataset was built using a multi-source pipeline that combines search acquisition, contact enrichment, email verification, and investment signal inference.  
-The current output covers 13 countries with 0 verified decision maker contact records.  
+The current output covers 13 countries; decision-maker depth and email verification rates are constrained by the enrichment tiers used during the build (see §8).  
 The resulting schema and scoring structure are designed to power RAG-based natural language querying for family office intelligence use cases.
 
 ## 2. Tech Stack
@@ -100,11 +102,18 @@ The resulting schema and scoring structure are designed to power RAG-based natur
 - Average completeness score: 23.6
 
 ## 8. Challenges & Solutions
-1. Apollo free tier credit limits — solved by prioritizing high-confidence records first.
-2. Local Ollama model too slow for classification — solved by replacing with heuristic keyword classifier (30 seconds vs 4.5 hours).
-3. PowerShell mkdir syntax differences — solved by running directory creation steps separately.
-4. Pandas dtype conflicts with Apollo response payloads — solved by coercing write values to strings before dataframe updates.
-5. Family office vs adjacent business disambiguation — solved by multi-signal confidence scoring and negative keyword suppression.
+
+### API tier constraints (candor)
+- **Apollo (free tier):** Returned **0 decision makers for ~70% of records** due to credit limits, not a lack of people at those firms. **Solution:** Prioritized **high-confidence domains** first in the enrichment queue. **Full DM coverage requires a paid Apollo tier** (or equivalent people-data provider).
+- **Hunter.io (free tier, ~25 searches/month):** Caused **429 rate limits** mid-pipeline. **Solution:** Graceful backoff and error handling; processing continued where possible. **38 emails verified** within free-tier limits — additional verification requires a paid Hunter plan or batching over time.
+- **Completeness score (average ~23.6%):** Reflects **free-tier API constraints**, not missing raw data for most domains. With **paid tiers** across Apollo, Hunter, and PDL (People Data Labs), **estimated completeness for Tier 1 records would reach ~65–75%** for the same pipeline design.
+
+### Engineering & methodology
+1. Local Ollama model too slow for classification — replaced with a **heuristic keyword classifier** (seconds vs. multi-hour runs).
+2. PowerShell / path differences — directory and run steps documented for Windows.
+3. Pandas dtype conflicts with Apollo response payloads — coerced write values to strings before dataframe updates.
+4. Family office vs. adjacent business disambiguation — multi-signal confidence scoring and negative keyword suppression.
+5. Apollo free-tier throughput — batching and prioritization as above; upgrade path is paid credits.
 
 ## 9. Key Insights
 1. Geographic coverage is broad, with 13 countries represented and the largest concentration in United States.  

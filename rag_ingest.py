@@ -1,19 +1,25 @@
 import hashlib
 import json
 import os
+import shutil
 import time
 from datetime import date
+from typing import Optional
 
 import chromadb
 import openai
 import pandas as pd
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 
 CSV_PATH = "output/family_office_intelligence_master.csv"
 CHROMA_PATH = "./chroma_db"
 COLLECTION_NAME = "family_offices"
+OPENAI_EMBED_MODEL = "text-embedding-3-small"
+LOCAL_EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+OPENAI_TIMEOUT = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "60"))
 
 
 def normalize_text(value):
@@ -87,21 +93,96 @@ def build_document(row):
     return " | ".join(parts)
 
 
-def get_embedding(openai_client, text):
-    response = openai_client.embeddings.create(model="text-embedding-3-small", input=text)
-    return response.data[0].embedding
+def check_openai_embeddings_working(client: openai.OpenAI) -> bool:
+    """Single probe call — must succeed for OpenAI to be the embedding provider."""
+    try:
+        client.with_options(timeout=OPENAI_TIMEOUT).embeddings.create(
+            model=OPENAI_EMBED_MODEL,
+            input="embedding connectivity check",
+        )
+        return True
+    except Exception as exc:
+        print(
+            f"[RAG INGEST] OpenAI embedding probe failed ({exc!r}) — "
+            "will not use OpenAI for embeddings."
+        )
+        return False
+
+
+def get_embedding(
+    text: str,
+    openai_client: Optional[openai.OpenAI],
+    use_openai: bool,
+    local_embedder,
+):
+    """
+    Embeddings: OpenAI text-embedding-3-small when use_openai is True,
+    else explicit local sentence-transformers fallback (same model as query path).
+    """
+    if use_openai and openai_client is not None:
+        response = openai_client.with_options(timeout=OPENAI_TIMEOUT).embeddings.create(
+            model=OPENAI_EMBED_MODEL,
+            input=text,
+        )
+        return response.data[0].embedding, OPENAI_EMBED_MODEL
+
+    emb = local_embedder.encode(text).tolist()
+    return emb, LOCAL_EMBED_MODEL
+
+
+def resolve_embedding_provider(openai_client: Optional[openai.OpenAI]) -> tuple[bool, str]:
+    """
+    Returns (use_openai, status_message_printed_at_startup).
+    """
+    key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not key:
+        msg = (
+            f"[RAG INGEST] OPENAI_API_KEY not set → using explicit fallback: "
+            f"{LOCAL_EMBED_MODEL}"
+        )
+        print(msg)
+        return False, msg
+
+    if openai_client is None:
+        print(
+            f"[RAG INGEST] OpenAI client unavailable → explicit fallback: {LOCAL_EMBED_MODEL}"
+        )
+        return False, ""
+
+    if check_openai_embeddings_working(openai_client):
+        msg = (
+            f"[RAG INGEST] Embedding provider: OpenAI ({OPENAI_EMBED_MODEL}) — key valid."
+        )
+        print(msg)
+        return True, msg
+
+    print(
+        f"[RAG INGEST] OPENAI_API_KEY present but embeddings not usable → "
+        f"explicit fallback: {LOCAL_EMBED_MODEL}"
+    )
+    return False, ""
 
 
 def main():
+    # Fresh vector store so ingest/query dimensions always match this run's provider
+    if os.path.exists(CHROMA_PATH):
+        shutil.rmtree(CHROMA_PATH)
+        print(f"[RAG INGEST] Removed existing {CHROMA_PATH} for a full rebuild.")
+
     df = pd.read_csv(CSV_PATH)
+
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    openai_client = openai.OpenAI(api_key=api_key) if api_key else None
+    use_openai, _ = resolve_embedding_provider(openai_client)
+
+    local_embedder = SentenceTransformer(LOCAL_EMBED_MODEL)
+    used_embedding_model = ""
 
     client = chromadb.PersistentClient(path=CHROMA_PATH)
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"},
     )
-
-    openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     records = []
     for _, r in df.iterrows():
@@ -139,7 +220,6 @@ def main():
     batch_size = 20
     total_batches = (total + batch_size - 1) // batch_size
 
-    # optional reset/upsert safety: delete ids in current set then upsert
     ids_all = [x[0] for x in records]
     try:
         collection.delete(ids=ids_all)
@@ -153,7 +233,13 @@ def main():
         ids = [x[0] for x in batch]
         docs = [x[1] for x in batch]
         metas = [x[2] for x in batch]
-        embs = [get_embedding(openai_client, t) for t in docs]
+        embs = []
+        for t in docs:
+            emb, model_name = get_embedding(t, openai_client, use_openai, local_embedder)
+            if not used_embedding_model:
+                used_embedding_model = model_name
+                print(f"[RAG INGEST] First vector used model: {used_embedding_model}")
+            embs.append(emb)
 
         collection.upsert(ids=ids, documents=docs, metadatas=metas, embeddings=embs)
         print(f"Embedded batch {b+1}/{total_batches} - Total: {end} records")
@@ -165,15 +251,43 @@ def main():
     os.makedirs("docs", exist_ok=True)
     summary = {
         "total_records": count,
-        "embedding_model": "text-embedding-3-small",
+        "embedding_model": used_embedding_model or "unknown",
         "vector_db": "ChromaDB",
-        "collection_name": "family_offices",
+        "collection_name": COLLECTION_NAME,
         "ingestion_date": str(date.today()),
         "chunk_strategy": "full_record_natural_language",
+        "openai_used_for_embeddings": use_openai,
     }
     with open("docs/rag_ingestion_log.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
 
+def run_post_ingest_tests():
+    """Smoke-test retrieval + generation after a successful ingest."""
+    from rag_query import FamilyOfficeRAG
+
+    test_queries = [
+        "Which family offices focus on venture capital?",
+        "Show me family offices in Europe with emails",
+        "Find single family offices in North America",
+    ]
+    print("\n[RAG INGEST] Running post-ingest test queries...\n")
+    rag = FamilyOfficeRAG()
+    if not rag.is_database_ready():
+        print("[RAG INGEST] Tests skipped: database not ready.")
+        return
+    for q in test_queries:
+        result = rag.query(q)
+        ans = result.get("answer") or ""
+        print(f"Q: {q}")
+        print(f"A: {ans[:200]}{'...' if len(ans) > 200 else ''}")
+        src = result.get("sources") or []
+        names = [s.get("fo_name", "") for s in src]
+        print(f"Sources: {names}")
+        print("---")
+
+
 if __name__ == "__main__":
     main()
+    if os.path.isdir(CHROMA_PATH):
+        run_post_ingest_tests()
