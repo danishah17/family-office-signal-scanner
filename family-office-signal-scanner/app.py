@@ -15,9 +15,19 @@ from reportlab.platypus import (
     Table, TableStyle,
 )
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+import html
 import io
 
 _SCANNER_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _esc(val):
+    """Escape text embedded in HTML (LLM / API output)."""
+    if val is None:
+        return ""
+    return html.escape(str(val))
+
+
 _FAVICON = os.path.join(_SCANNER_DIR, "assets", "favicon.png")
 
 load_dotenv()
@@ -1952,11 +1962,11 @@ def run_scan(inputs):
         <div class="content-wrap">
             <div class="loading-wrap">
                 <div class="loading-title">
-                    Scanning for {inputs['fund_name']}
+                    Scanning for {_esc(inputs['fund_name'])}
                 </div>
                 <div class="loading-sub">
-                    Analyzing {inputs['strategy']} signals 
-                    in {inputs['geography']}
+                    Analyzing {_esc(inputs['strategy'])} signals 
+                    in {_esc(inputs['geography'])}
                 </div>
                 {items_html}
             </div>
@@ -2001,7 +2011,8 @@ def run_scan(inputs):
 
     except Exception as e:
         loading_placeholder.empty()
-        st.error(f"Scanner error: {str(e)}")
+        st.error("The scan could not be completed. Check API credentials and try again.")
+        st.caption(str(e))
 
 def render_results():
     data   = st.session_state.results
@@ -2028,11 +2039,11 @@ def render_results():
     st.markdown(f"""
     <div class="results-bar">
         <div class="results-bar-left">
-            <div class="results-fund">{fund}</div>
+            <div class="results-fund">{_esc(fund)}</div>
             <div class="results-meta-line">
-                {strategy} &nbsp;&middot;&nbsp; {geography}
-                &nbsp;&middot;&nbsp; ${check}M Target Check
-                &nbsp;&middot;&nbsp; {sector}
+                {_esc(strategy)} &nbsp;&middot;&nbsp; {_esc(geography)}
+                &nbsp;&middot;&nbsp; ${_esc(check)}M Target Check
+                &nbsp;&middot;&nbsp; {_esc(sector)}
                 &nbsp;&middot;&nbsp; 
                 Scanned {datetime.now().strftime('%b %d, %Y')}
             </div>
@@ -2069,7 +2080,7 @@ def render_results():
         <div class="intel-panel">
             <div class="intel-panel-label">Market Intelligence</div>
             <div class="intel-summary">
-                {data.get('market_summary','')}
+                {_esc(data.get('market_summary',''))}
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2078,14 +2089,14 @@ def render_results():
         trends_html = "".join([f"""
         <div class="intel-list-item">
             <div class="intel-marker-blue"></div>
-            <div>{t}</div>
+            <div>{_esc(t)}</div>
         </div>
         """ for t in data.get('deployment_trends', [])])
 
         mistakes_html = "".join([f"""
         <div class="intel-list-item">
             <div class="intel-marker-red"></div>
-            <div>{m}</div>
+            <div>{_esc(m)}</div>
         </div>
         """ for m in data.get('common_mistakes', [])])
 
@@ -2136,13 +2147,13 @@ def render_results():
         evidence_items = "".join([f"""
         <div class="signal-evidence-item">
             <div class="signal-evidence-marker"></div>
-            <div>{ev}</div>
+            <div>{_esc(ev)}</div>
         </div>
         """ for ev in fo.get('signal_evidence', [])])
 
         contacts = fo.get('primary_contacts', [])
         contacts_str = " &nbsp;&middot;&nbsp; ".join([
-            f"<strong>{c['name']}</strong>, {c['title']}"
+            f"<strong>{_esc(c.get('name',''))}</strong>, {_esc(c.get('title',''))}"
             for c in contacts
         ])
 
@@ -2151,30 +2162,30 @@ def render_results():
             <div class="signal-card-header">
                 <div>
                     <div class="signal-fo-name">
-                        {fo.get('name','')}
+                        {_esc(fo.get('name',''))}
                     </div>
                     <div class="signal-fo-meta">
-                        {fo.get('location','')} 
-                        &nbsp;&middot;&nbsp; {fo.get('fo_type','')}
+                        {_esc(fo.get('location',''))} 
+                        &nbsp;&middot;&nbsp; {_esc(fo.get('fo_type',''))}
                         &nbsp;&middot;&nbsp; 
-                        AUM {fo.get('aum_range','')}
+                        AUM {_esc(fo.get('aum_range',''))}
                     </div>
                 </div>
                 <div class="signal-header-right">
                     <span class="signal-badge {badge_cls}">
-                        {strength}
+                        {_esc(strength)}
                     </span>
                     <div class="match-score">
-                        <span>{fo.get('match_score',0)}</span>% match
+                        <span>{_esc(fo.get('match_score',0))}</span>% match
                     </div>
                 </div>
             </div>
             <div class="signal-pills">
                 <span class="signal-pill">
-                    {fo.get('signal_type','').replace('_',' ')}
+                    {_esc(str(fo.get('signal_type','')).replace('_',' '))}
                 </span>
                 <span class="signal-pill">
-                    Check: {fo.get('check_size_range','')}
+                    Check: {_esc(fo.get('check_size_range',''))}
                 </span>
             </div>
             <div class="signal-body">
@@ -2186,7 +2197,7 @@ def render_results():
                 </div>
                 <div class="signal-thesis">
                     <strong>Investment Thesis:</strong> 
-                    {fo.get('investment_thesis','')}
+                    {_esc(fo.get('investment_thesis',''))}
                 </div>
                 <div class="signal-contacts">
                     <strong>Key Contacts:</strong> 
@@ -2200,10 +2211,10 @@ def render_results():
                         Outreach Angle
                     </div>
                     <div class="signal-outreach-text">
-                        {fo.get('outreach_angle','')}
+                        {_esc(fo.get('outreach_angle',''))}
                     </div>
                     <div class="signal-urgency">
-                        {fo.get('urgency_note','')}
+                        {_esc(fo.get('urgency_note',''))}
                     </div>
                 </div>
             </div>
@@ -2227,11 +2238,11 @@ def render_results():
     for step in data.get('outreach_sequence', []):
         steps_html += f"""
         <div class="step-row">
-            <div class="step-num">{step['step']}</div>
+            <div class="step-num">{_esc(step.get('step', ''))}</div>
             <div class="step-content">
-                <div class="step-title">{step['action']}</div>
-                <div class="step-timing">{step['timing']}</div>
-                <div class="step-template">{step['template']}</div>
+                <div class="step-title">{_esc(step.get('action', ''))}</div>
+                <div class="step-timing">{_esc(step.get('timing', ''))}</div>
+                <div class="step-template">{_esc(step.get('template', ''))}</div>
             </div>
         </div>
         """
@@ -2269,7 +2280,8 @@ def render_results():
                 use_container_width=True
             )
         except Exception as e:
-            st.error(f"PDF error: {str(e)}")
+            st.error("PDF export failed. Try again or contact support.")
+            st.caption(str(e))
 
     # CTA
     st.markdown("""

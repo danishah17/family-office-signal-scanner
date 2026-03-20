@@ -1,3 +1,4 @@
+import html
 import os
 import sys
 
@@ -6,10 +7,10 @@ import streamlit as st
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from rag_query import FamilyOfficeRAG
 
-# Page config
+# Page config — enterprise: no decorative icon characters
 st.set_page_config(
     page_title="PolarityIQ Family Office Intelligence",
-    page_icon="🏦",
+    page_icon=None,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -44,6 +45,8 @@ st.markdown(
         border-radius: 10px;
         border: 1px solid #E0E0E0;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        white-space: pre-wrap;
+        word-wrap: break-word;
     }
     .warn-box {
         background: #FFF8E6;
@@ -53,10 +56,22 @@ st.markdown(
         margin: 0.75rem 0;
         color: #5C4A12;
     }
+    .rel-high { color: #166534; font-weight: 600; font-size: 0.75rem; }
+    .rel-mid { color: #92400E; font-weight: 600; font-size: 0.75rem; }
+    .rel-low { color: #991B1B; font-weight: 600; font-size: 0.75rem; }
 </style>
 """,
     unsafe_allow_html=True,
 )
+
+
+def relevance_label(pct: float) -> tuple[str, str]:
+    """Return (css_class, human-readable label) for enterprise UI."""
+    if pct >= 70:
+        return "rel-high", "High"
+    if pct >= 50:
+        return "rel-mid", "Medium"
+    return "rel-low", "Low"
 
 
 # Re-fetch periodically so a fresh ingest is picked up without manual restart
@@ -69,8 +84,8 @@ def load_rag():
 st.markdown(
     """
 <div class="main-header">
-    <h1>🏦 Family Office Intelligence Platform</h1>
-    <p>Query verified international family offices using natural language</p>
+    <h1>Family Office Intelligence Platform</h1>
+    <p>Query verified international family offices using natural language.</p>
 </div>
 """,
     unsafe_allow_html=True,
@@ -83,19 +98,19 @@ status_msg = rag.init_status_message()
 
 # Sidebar
 with st.sidebar:
-    st.markdown("### 📊 Dataset Stats")
+    st.markdown("### Dataset statistics")
     if db_ready:
         st.metric("Indexed family offices", db_count)
     else:
-        st.metric("Indexed family offices", "—")
-        st.caption("Index the CSV with `python rag_ingest.py`.")
+        st.metric("Indexed family offices", "N/A")
+        st.caption("Index the CSV with: `python rag_ingest.py`")
 
-    st.metric("Countries Covered", "13")
-    st.metric("Verified Emails", "38")
-    st.metric("Decision Makers", "50+")
+    st.metric("Countries covered", "13")
+    st.metric("Verified emails (build)", "38")
+    st.metric("Decision makers (build)", "50+")
 
     st.markdown("---")
-    st.markdown("### 💡 Example Queries")
+    st.markdown("### Example queries")
 
     example_queries = [
         "Which family offices focus on venture capital?",
@@ -113,7 +128,7 @@ with st.sidebar:
             st.session_state.query_input = query
 
     st.markdown("---")
-    st.markdown("### ⚙️ Settings")
+    st.markdown("### Settings")
     n_results = st.slider(
         "Records to retrieve",
         min_value=3,
@@ -122,7 +137,7 @@ with st.sidebar:
     )
 
 # Main query interface
-st.markdown("### 🔍 Query the Intelligence Database")
+st.markdown("### Query the intelligence database")
 
 if not db_ready:
     st.error(
@@ -135,9 +150,11 @@ if not db_ready:
     st.stop()
 
 query_input = st.text_input(
-    "Ask anything about family offices in our database:",
+    "Ask a question about family offices in the database:",
     value=st.session_state.get("query_input", ""),
-    placeholder="e.g. Show me family offices in Europe focused on private credit",
+    placeholder=(
+        "Example: Show me family offices in Europe focused on private credit"
+    ),
     key="query_box",
 )
 
@@ -151,7 +168,7 @@ with col1:
     )
 
 if search_clicked and query_input:
-    with st.spinner("Searching family office intelligence database..."):
+    with st.spinner("Searching the intelligence database..."):
         try:
             rag = load_rag()
             result = rag.query(query_input, n_results=n_results)
@@ -159,7 +176,7 @@ if search_clicked and query_input:
             if result.get("error") in ("empty_database", "no_collection"):
                 st.error(
                     "Database not initialized or empty. Run `rag_ingest.py` first, "
-                    "then try again (this page refreshes its connection every ~2 minutes)."
+                    "then try again. This page refreshes its connection periodically."
                 )
                 st.stop()
 
@@ -177,61 +194,68 @@ if search_clicked and query_input:
                     unsafe_allow_html=True,
                 )
                 for sq in result.get("suggested_queries") or []:
-                    st.caption(f"• {sq}")
+                    st.caption(f"- {sq}")
 
-            # Answer
-            st.markdown("### 💬 Intelligence Report")
+            answer_text = result.get("answer") or ""
+            st.markdown("### Intelligence report")
             st.markdown(
-                f'<div class="answer-box">{result["answer"]}</div>',
+                f'<div class="answer-box">{html.escape(answer_text)}</div>',
                 unsafe_allow_html=True,
             )
 
-            # Metrics row
             st.markdown("---")
             m1, m2, m3 = st.columns(3)
             with m1:
-                st.metric("Database Size", f"{result['records_searched']} FOs")
+                st.metric("Database size", f"{result['records_searched']} records")
             with m2:
-                st.metric("Records Retrieved", result["records_retrieved"])
+                st.metric("Records retrieved", result["records_retrieved"])
             with m3:
-                st.metric("Query", "✓ Complete")
+                st.metric("Status", "Complete")
 
-            # Sources
-            st.markdown("### 📋 Source Records")
+            st.markdown("### Source records")
             if not result.get("sources"):
                 st.info(
-                    "No source rows attached to this answer — broaden your query or "
-                    "check that ingestion used the same embedding provider as this app."
+                    "No source rows attached to this answer. Broaden your query or "
+                    "confirm that ingestion used the same embedding provider as this app."
                 )
             else:
                 for source in result["sources"]:
-                    rel = source.get("relevance", 0)
-                    relevance_color = "🟢" if rel >= 70 else "🟡" if rel >= 50 else "🔴"
-                    site = source.get("website") or ""
-                    link = (
-                        f'<a href="{site}" target="_blank" rel="noopener">Visit Website</a>'
-                        if site
-                        else "—"
-                    )
+                    rel = float(source.get("relevance", 0) or 0)
+                    rel_cls, rel_name = relevance_label(rel)
+                    fo = html.escape(str(source.get("fo_name", "Unknown")))
+                    country = html.escape(str(source.get("country", "") or ""))
+                    site = (source.get("website") or "").strip()
+                    if site:
+                        safe_href = html.escape(site, quote=True)
+                        link = (
+                            f'<a href="{safe_href}" target="_blank" '
+                            f'rel="noopener noreferrer">Website</a>'
+                        )
+                    else:
+                        link = "No URL"
                     st.markdown(
-                        f'<div class="source-card">{relevance_color} <strong>'
-                        f'{source["fo_name"]}</strong> — {source["country"]} | '
-                        f'Relevance: {rel}% | {link}</div>',
+                        f'<div class="source-card">'
+                        f'<span class="{rel_cls}">{rel_name} match ({rel}%)</span><br/>'
+                        f"<strong>{fo}</strong> &mdash; {country} | {link}"
+                        f"</div>",
                         unsafe_allow_html=True,
                     )
 
         except Exception as e:
-            st.error(f"Query failed: {str(e)}")
-            st.info("Make sure `rag_ingest.py` has been run and `OPENAI_API_KEY` (optional) is valid.")
+            st.error("Query failed. Verify configuration and try again.")
+            st.caption(str(e))
+            st.info(
+                "Ensure `rag_ingest.py` has been run and API keys in Secrets / `.env` "
+                "match your chosen embedding provider."
+            )
 
 elif search_clicked and not query_input:
-    st.warning("Please enter a query first.")
+    st.warning("Enter a query before searching.")
 
-# Footer
 st.markdown("---")
 st.markdown(
-    "*Embeddings: OpenAI `text-embedding-3-small` when the key validates, else "
-    "`sentence-transformers/all-MiniLM-L6-v2` (must match ingest). "
-    "Chat: Anthropic → OpenAI → Gemini → Mistral. "
-    "Data: Apollo, Hunter, SEC EDGAR.*"
+    "**Technical note:** Embeddings use OpenAI `text-embedding-3-small` when the key "
+    "validates; otherwise `sentence-transformers/all-MiniLM-L6-v2` (must match ingest). "
+    "Answer generation: Anthropic, then OpenAI, Gemini, or Mistral as configured. "
+    "Enrichment sources: Apollo, Hunter, SEC EDGAR."
 )

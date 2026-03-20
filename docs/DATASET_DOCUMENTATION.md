@@ -128,3 +128,38 @@ The resulting schema and scoring structure are designed to power RAG-based natur
 3. Crunchbase portfolio company data via their API
 4. Manual verification of top 50 Tier 1 records
 5. Real-time news monitoring via RSS feeds per FO
+
+## 11. Task 2 — RAG Pipeline (Falcon / PolarityIQ deliverable)
+
+This section satisfies the brief documentation note required for **Task #2** (stack, chunking, embedding, retrieval, failures, improvements).
+
+### Stack choices
+- **Vector database:** ChromaDB (persistent, `./chroma_db`), collection `family_offices`, cosine space.
+- **Embeddings:** OpenAI `text-embedding-3-small` when `OPENAI_API_KEY` validates; otherwise explicit fallback to **`sentence-transformers/all-MiniLM-L6-v2`** (ingest and query **must** use the same provider for meaningful retrieval).
+- **Orchestration:** Python; ingestion `rag_ingest.py`, query + generation `rag_query.py`, UI `app.py` (Streamlit).
+- **Generation:** Anthropic Claude preferred for answers; fallbacks OpenAI, Gemini, Mistral; final fallback retrieval-only summary if all LLM backends fail.
+
+### Chunking strategy
+- **One Chroma document per family office record** — natural-language concatenation of identity, geography, investment profile, decision makers (when present), signals, and website (see `build_document()` in `rag_ingest.py`). No arbitrary text splits; granularity equals one FO per vector.
+
+### Retrieval approach
+- Top-**k** similarity search (`k` configurable in UI, default 5) on query embedding against stored vectors.
+- Metadata (country, tier, etc.) stored for display in sources; answers are **grounded** in retrieved text with system instructions not to invent names.
+
+### What failed or was constrained
+- Cloud embedding APIs (quota, billing, or regional restrictions) previously forced silent fallbacks; the pipeline now **logs** the active embedding provider and requires **ingest/query alignment**.
+- LLM backends may be unavailable depending on keys; the app degrades to structured retrieval listing.
+
+### What we would improve with more time
+- Hybrid retrieval (metadata filters + vector search) for geography/strategy queries.
+- Re-ranking cross-encoder for top-k quality.
+- Scheduled re-ingestion and evaluation harness with fixed query sets against the master CSV.
+- Hosted `chroma_db` or managed vector store for Streamlit Cloud (ephemeral disk) deployments.
+
+### Example queries (against the real dataset)
+Minimum three demonstration queries are supported by the ingestion + RAG stack, e.g.:
+- Which family offices focus on venture capital?
+- Show me family offices in Europe with emails (where present in the record text).
+- Find single family offices in North America.
+
+Post-ingest smoke tests can be run via `python rag_ingest.py` (includes optional test queries when ingestion completes).

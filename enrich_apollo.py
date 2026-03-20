@@ -179,7 +179,7 @@ def main():
         if people:
             dm_found_count += len(people)
             df.at[idx, "apollo_enriched"] = True
-            print(f"  ✓ Found {len(people)} decision makers")
+            print(f"  [OK] Found {len(people)} decision makers")
         else:
             print("  — No decision makers found")
 

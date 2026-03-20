@@ -2,6 +2,15 @@
 
 ## A production-grade family office data pipeline, RAG intelligence system, and AI-powered scanner
 
+### Falcon / PolarityIQ evaluation mapping
+
+| Falcon task | Requirement (summary) | Location in repo |
+|-------------|-------------------------|------------------|
+| **Task 1** | ≥200 real FO records, CSV/XLSX, documentation | `output/`, `docs/DATASET_DOCUMENTATION.md` |
+| **Task 2** | RAG on Task 1 data, vector DB, live or recorded demo | `rag_ingest.py`, `rag_query.py`, `app.py`, §11 in dataset doc |
+| **Task 3** | SaaS conversion analysis (PolarityIQ) | `docs/` (e.g. analysis PDF / notes) |
+| **Task 4** | Trip-wire product ($47–$1k), build + explanation | `family-office-signal-scanner/` |
+
 ## Live demos
 
 - **FO Intelligence RAG** (query your dataset): `[YOUR_STREAMLIT_RAG_URL]`
