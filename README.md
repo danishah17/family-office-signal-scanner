@@ -13,10 +13,7 @@
 
 ## Live demos
 
-- **FO Intelligence RAG** (query your dataset): `[YOUR_STREAMLIT_RAG_URL]`
-- **Family Office Signal Scanner** (trip-wire product): `[YOUR_STREAMLIT_SCANNER_URL]`
-
-Deploy **two separate** Streamlit Cloud apps: one with root `app.py`, one with `family-office-signal-scanner/app.py` (see [Two Streamlit apps](#two-streamlit-apps-streamlit-cloud)).
+- **Family Office Signal Scanner** (trip-wire product): `https://family-office-signal-scanner-ikpxhsqs7lcqpu2cuy9m8n.streamlit.app/`
 
 ---
 
