@@ -8,6 +8,9 @@ The dataset was built using a multi-source pipeline that combines search acquisi
 The current output covers 13 countries; decision-maker depth and email verification rates are constrained by the enrichment tiers used during the build (see §8).  
 The resulting schema and scoring structure are designed to power RAG-based natural language querying for family office intelligence use cases.
 
+### Schema rationale (why these fields exist)
+Columns are chosen to mirror how investment and BD teams actually research family offices: **identity** (`fo_name`, `fo_type`, `website`, `domain`) for deduplication; **geo** (`hq_*`) for mandate fit; **investment** (`investment_focus`, `sector_preferences`, `check_size_range`, `investment_stage`, `geographic_focus`, `co_invest_frequency`) for thesis matching; **people** (`dm_*`, `email_coverage`) for outreach; **signals** (`recent_news_*`, `sec_registered`, `recent_filing_*`) for timing; **quality** (`completeness_score`, `DATA_TIER`, `confidence_score`) for prioritization. The master CSV is the single source of truth ingested end-to-end into the RAG layer (one document per FO).
+
 ## 2. Tech Stack
 - Apify (Google Search Scraper) — raw URL acquisition
 - Apollo.io API — organization and people enrichment  
@@ -154,7 +157,10 @@ This section satisfies the brief documentation note required for **Task #2** (st
 - Hybrid retrieval (metadata filters + vector search) for geography/strategy queries.
 - Re-ranking cross-encoder for top-k quality.
 - Scheduled re-ingestion and evaluation harness with fixed query sets against the master CSV.
-- Hosted `chroma_db` or managed vector store for Streamlit Cloud (ephemeral disk) deployments.
+- Optional hosted vector store for multi-region deployments (the repo may ship a **committed** `chroma_db/` snapshot for Streamlit Cloud demos; see `README.md`).
+
+### Shipped vector index (Streamlit Cloud)
+The repository may include a **pre-built** `chroma_db/` directory so evaluators get a working RAG without running `rag_ingest.py` on the server. **Query embeddings must match ingest:** `rag_query.py` reads `docs/rag_ingestion_log.json` and aligns the embedding provider with whatever was used when the index was built (`openai_used_for_embeddings`). To rebuild with a different embedding mode, run `python rag_ingest.py` locally, commit the new `chroma_db/` and updated `docs/rag_ingestion_log.json`, and redeploy.
 
 ### Example queries (against the real dataset)
 Minimum three demonstration queries are supported by the ingestion + RAG stack, e.g.:

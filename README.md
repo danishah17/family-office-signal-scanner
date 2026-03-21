@@ -6,30 +6,51 @@
 
 | Falcon task | Requirement (summary) | Location in repo |
 |-------------|-------------------------|------------------|
-| **Task 1** | ≥200 real FO records, CSV/XLSX, documentation | `output/`, `docs/DATASET_DOCUMENTATION.md` |
-| **Task 2** | RAG on Task 1 data, vector DB, live or recorded demo | `rag_ingest.py`, `rag_query.py`, `app.py`, §11 in dataset doc |
-| **Task 3** | SaaS conversion analysis (PolarityIQ) | `docs/` (e.g. analysis PDF / notes) |
-| **Task 4** | Trip-wire product ($47–$1k), build + explanation | `family-office-signal-scanner/` |
+| **Task 1** | ≥200 real FO records, CSV/XLSX, documentation | `output/`, `docs/DATASET_DOCUMENTATION.md`, `docs/DATA_DICTIONARY.md` |
+| **Task 2** | RAG on Task 1 data, vector DB, live or recorded demo | `rag_ingest.py`, `rag_query.py`, `app.py`, `chroma_db/`, §11 in dataset doc |
+| **Task 3** | SaaS conversion analysis (PolarityIQ) | Your deliverable in `docs/` (you already have this) |
+| **Task 4** | Trip-wire product ($47–$1k), build + explanation | `family-office-signal-scanner/`, `docs/TASK4_BUILD_WALKTHROUGH.md` |
 
-## Live demos
+## Live demos (paste your Streamlit Cloud URLs here)
 
-- **FO Intelligence RAG** (query your dataset): `[YOUR_STREAMLIT_RAG_URL]`
-- **Family Office Signal Scanner** (trip-wire product): `[YOUR_STREAMLIT_SCANNER_URL]`
+- **FO Intelligence RAG:** `[YOUR_STREAMLIT_RAG_URL]`
+- **Family Office Signal Scanner:** `[YOUR_STREAMLIT_SCANNER_URL]`
 
-Deploy **two separate** Streamlit Cloud apps: one with root `app.py`, one with `family-office-signal-scanner/app.py` (see [Two Streamlit apps](#two-streamlit-apps-streamlit-cloud)).
+Deploy **two** Streamlit Cloud apps from the **same** GitHub repo with **different** entrypoints (see below).
 
 ---
 
-## Architecture overview
+## Evaluator quickstart (~60 seconds)
 
-Four-stage pipeline:
+1. Open **`output/family_office_intelligence_master.csv`** — confirm ≥200 rows of real FO data.
+2. Open the **RAG** Cloud URL — sidebar should show indexed count (~220). Run a query, e.g. *Which family offices focus on venture capital?*
+3. Open the **Signal Scanner** Cloud URL — run a scan with a valid **`ANTHROPIC_API_KEY`** in Secrets.
+4. Skim **`docs/DATASET_DOCUMENTATION.md`** (methodology + Task 2 RAG section) and **`CHANGELOG.md`**.
 
-1. **Discovery** — Apify Google Search → domain acquisition (`apify_scraper.py`).
-2. **Enrichment** — Apollo (org/people), Hunter (domain + verification), optional PDL-style paths (`enrich_apollo.py`, `verify_emails.py`).
-3. **Intelligence layer** — SEC EDGAR, news/signals, keyword investment inference (`enrich_investment_intelligence.py`).
-4. **RAG system** — ChromaDB + OpenAI `text-embedding-3-small` (or local fallback) + Streamlit UI (`rag_ingest.py`, `rag_query.py`, `app.py`).
+---
 
-The **Signal Scanner** (`family-office-signal-scanner/`) is a **standalone** Streamlit app: Anthropic + ReportLab PDF — it does **not** query Chroma by default.
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph discovery [Discovery]
+    A[Apify Google Search] --> B[Domains + URLs]
+  end
+  subgraph enrich [Enrichment]
+    B --> C[Apollo + Hunter + SEC]
+    C --> D[Master CSV]
+  end
+  subgraph rag [RAG]
+    D --> E[rag_ingest.py]
+    E --> F[(chroma_db)]
+    F --> G[rag_query.py]
+    G --> H[Streamlit app.py]
+  end
+  subgraph scanner [Task 4 Scanner]
+    I[Anthropic] --> J[Streamlit family-office-signal-scanner]
+    J --> K[PDF ReportLab]
+  end
+```
 
 ---
 
@@ -38,32 +59,22 @@ The **Signal Scanner** (`family-office-signal-scanner/`) is a **standalone** Str
 - **220** validated family office records (master output)
 - **13** countries covered
 - **38** verified emails (within free-tier Hunter constraints during build)
-- Multi-source enrichment waterfall (see `docs/DATASET_DOCUMENTATION.md` for honest limits on free tiers)
-
----
-
-## Task deliverables
-
-| Task | Deliverable |
-|------|-------------|
-| **Task 1** | Dataset — `output/family_office_intelligence_master.csv` (+ `.xlsx`), `docs/DATASET_DOCUMENTATION.md` |
-| **Task 2** | RAG pipeline — `rag_ingest.py`, `rag_query.py`, root `app.py` |
-| **Task 3** | SaaS / analysis docs — `docs/` |
-| **Task 4** | Signal Scanner — `family-office-signal-scanner/` |
+- Honest limits on tiers: **`docs/DATASET_DOCUMENTATION.md`** §8
 
 ---
 
 ## Tech stack
 
-- **Python 3.x**, **pandas**, **openpyxl**
+- **Python 3.11** (`runtime.txt` for Streamlit Cloud)
+- **pandas**, **openpyxl**
 - **Apify**, **Apollo.io**, **Hunter.io**, **SEC EDGAR**
-- **ChromaDB**, **OpenAI** embeddings (`text-embedding-3-small`), **sentence-transformers** fallback
-- **Anthropic** (RAG chat + Signal Scanner), **Streamlit**
-- **ReportLab** (PDF in Signal Scanner)
+- **ChromaDB**, **OpenAI** `text-embedding-3-small`, **sentence-transformers** fallback (`all-MiniLM-L6-v2`)
+- **Anthropic** (RAG answers + Signal Scanner), **Streamlit**
+- **ReportLab** (Scanner PDF)
 
 ---
 
-## Setup
+## Setup (local)
 
 ```powershell
 cd family-office-intelligence
@@ -71,12 +82,12 @@ python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
-# Edit .env with your keys
+# Edit .env with your keys (never commit .env)
 ```
 
-### Index the dataset for RAG
+### Index the dataset for RAG (optional if using committed `chroma_db/`)
 
-If `OPENAI_API_KEY` in `.env` is missing or invalid, ingestion uses the local embedding model `sentence-transformers/all-MiniLM-L6-v2` (same as the query path). Fix the key if you want OpenAI embeddings.
+If `OPENAI_API_KEY` is missing or invalid, ingestion uses **`sentence-transformers/all-MiniLM-L6-v2`**. **`rag_query.py` reads `docs/rag_ingestion_log.json`** so query vectors always match the index.
 
 ```powershell
 python rag_ingest.py
@@ -88,44 +99,60 @@ python rag_ingest.py
 streamlit run app.py
 ```
 
-### Run Family Office Signal Scanner (separate app)
+### Run Family Office Signal Scanner (separate process)
 
 ```powershell
 streamlit run family-office-signal-scanner/app.py
+```
+
+### Smoke test (CI runs this too)
+
+```powershell
+python scripts/smoke_rag.py
 ```
 
 ---
 
 ## Two Streamlit apps (Streamlit Cloud)
 
-1. **RAG app** — Main file: `app.py` — requires `chroma_db/` after `rag_ingest.py` and `OPENAI_API_KEY` (or local embeddings per `rag_query.py`).
-2. **Signal Scanner** — Main file: `family-office-signal-scanner/app.py` — uses `family-office-signal-scanner/requirements.txt` and `family-office-signal-scanner/.streamlit/config.toml`.
+| App | Main file | Requirements | Secrets (typical) |
+|-----|-----------|--------------|-------------------|
+| **RAG** | `app.py` | Root **`requirements.txt`** | `ANTHROPIC_API_KEY` (answers), optional `OPENAI_API_KEY` (ignored for embeddings if log says local index) |
+| **Scanner** | `family-office-signal-scanner/app.py` | Advanced: **`family-office-signal-scanner/requirements.txt`** | `ANTHROPIC_API_KEY`, optional `ANTHROPIC_MODEL` |
 
-Point each Cloud deployment at the **same GitHub repo** but **different entrypoint** and optionally **different secrets** (Scanner only needs Anthropic for the scan flow).
+**RAG index:** This repo **includes** a built **`chroma_db/`** so Cloud does not require running ingest on the server. **`docs/rag_ingestion_log.json`** records whether the index used OpenAI or local embeddings; **`rag_query.py`** enforces parity. To rebuild: run `rag_ingest.py`, commit `chroma_db/` + `docs/rag_ingestion_log.json`, redeploy.
+
+**Advanced:** `RAG_IGNORE_INGESTION_LOG=1` restores key-only embedding selection (debug only).
 
 ---
 
-## Push & deploy (example)
+## CI
 
-Replace the remote URL with your GitHub repository.
-
-```powershell
-git init
-git add .
-git commit -m "Family Office Signal Scanner v1.0 — PolarityIQ Trip-Wire Product"
-git remote add origin https://github.com/danishah17/family-office-signal-scanner.git
-git branch -M main
-git push -u origin main
-```
-
-*If the repo URL differs, use your actual `git remote`.* Then connect **Streamlit Cloud** (two apps) with the paths in [Two Streamlit apps](#two-streamlit-apps-streamlit-cloud).
+GitHub Actions runs **`python scripts/smoke_rag.py`** on push/PR to **`main`** / **`master`**.
 
 ---
 
 ## Documentation
 
-- **Dataset honesty & methodology:** `docs/DATASET_DOCUMENTATION.md`
-- **RAG ingestion log (after ingest):** `docs/rag_ingestion_log.json`
+| Doc | Purpose |
+|-----|---------|
+| `docs/FALCON_SUBMISSION_PLAYBOOK.md` | Official brief alignment, checklists |
+| `docs/DATASET_DOCUMENTATION.md` | Methodology, Task 2 RAG §11 |
+| `docs/DATA_DICTIONARY.md` | Column meanings |
+| `docs/TASK4_BUILD_WALKTHROUGH.md` | Task 4 stack, ICP, ascension |
+| `docs/rag_ingestion_log.json` | Last ingest embedding mode + record count |
+| `CHANGELOG.md` | Release-style change log |
+
+---
+
+## Push & clone
+
+```powershell
+git clone https://github.com/danishah17/family-office-signal-scanner.git
+cd family-office-signal-scanner
+```
+
+*Use your actual `origin` if different.*
 
 ---
 

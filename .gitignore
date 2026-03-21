@@ -2,4 +2,5 @@
 venv/
 __pycache__/
 *.pyc
-chroma_db/
+# chroma_db/ is committed for Streamlit Cloud demos (see README). Re-ignore locally if rebuilding:
+# chroma_db/

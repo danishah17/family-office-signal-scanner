@@ -1,3 +1,4 @@
+import json
 import os
 
 import anthropic
@@ -13,6 +14,11 @@ OPENAI_EMBED_MODEL = "text-embedding-3-small"
 LOCAL_EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHROMA_PATH = "./chroma_db"
 COLLECTION_NAME = "family_offices"
+INGESTION_LOG_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "docs",
+    "rag_ingestion_log.json",
+)
 OPENAI_TIMEOUT = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "60"))
 ANTHROPIC_TIMEOUT = int(os.getenv("ANTHROPIC_TIMEOUT_SECONDS", "90"))
 GEMINI_TIMEOUT = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "120"))
@@ -72,6 +78,7 @@ class FamilyOfficeRAG:
         self.local_embedder = None
         self._use_openai_embeddings = False
         self.embedding_provider_label = "uninitialized"
+        self._embedding_warning = None
 
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if api_key:
@@ -106,8 +113,78 @@ class FamilyOfficeRAG:
             self.local_embedder = SentenceTransformer(LOCAL_EMBED_MODEL)
         return self.local_embedder
 
+    def _read_ingestion_openai_flag(self):
+        """True = index built with OpenAI embeddings; False = local MiniLM; None = unknown."""
+        try:
+            with open(INGESTION_LOG_PATH, encoding="utf-8") as f:
+                data = json.load(f)
+            if "openai_used_for_embeddings" in data:
+                return bool(data["openai_used_for_embeddings"])
+        except Exception:
+            pass
+        return None
+
     def _resolve_embedding_provider(self):
-        """Match rag_ingest.py: OpenAI text-embedding-3-small if key valid, else local (explicit)."""
+        """
+        Match rag_ingest.py and committed Chroma: use docs/rag_ingestion_log.json so query
+        embeddings never diverge from the index (e.g. valid OpenAI key + MiniLM index).
+        Set RAG_IGNORE_INGESTION_LOG=1 to restore key-only behavior (advanced / debugging).
+        """
+        self._embedding_warning = None
+        if os.getenv("RAG_IGNORE_INGESTION_LOG", "").strip() == "1":
+            self._resolve_embedding_provider_key_only()
+            return
+
+        flag = self._read_ingestion_openai_flag()
+
+        if flag is False:
+            self._use_openai_embeddings = False
+            self.embedding_provider_label = f"local (matches ingestion log): {LOCAL_EMBED_MODEL}"
+            print(
+                f"[RAG QUERY] Embedding provider locked from ingestion log -> "
+                f"{self.embedding_provider_label}"
+            )
+            if os.getenv("OPENAI_API_KEY", "").strip():
+                self._embedding_warning = (
+                    "Embeddings use the local model to match the shipped index "
+                    "(docs/rag_ingestion_log.json). OpenAI is not used for query vectors."
+                )
+            return
+
+        if flag is True:
+            key = os.getenv("OPENAI_API_KEY", "").strip()
+            if not key or self.openai_client is None:
+                self._use_openai_embeddings = False
+                self.embedding_provider_label = f"explicit fallback: {LOCAL_EMBED_MODEL}"
+                self._embedding_warning = (
+                    "Ingestion log says the index used OpenAI embeddings; add a valid "
+                    "OPENAI_API_KEY or re-ingest with local embeddings and update the log."
+                )
+                print(
+                    "[RAG QUERY] OPENAI_API_KEY missing but ingestion log expects OpenAI -> "
+                    + self.embedding_provider_label
+                )
+                return
+            if check_openai_embeddings_working(self.openai_client):
+                self._use_openai_embeddings = True
+                self.embedding_provider_label = f"OpenAI ({OPENAI_EMBED_MODEL})"
+                print(f"[RAG QUERY] Embedding provider: {self.embedding_provider_label}")
+                return
+            self._use_openai_embeddings = False
+            self.embedding_provider_label = f"explicit fallback: {LOCAL_EMBED_MODEL}"
+            self._embedding_warning = (
+                "Ingestion log expects OpenAI embeddings but the embedding API check failed; "
+                "retrieval quality may be poor until the key works or you re-ingest."
+            )
+            print(
+                f"[RAG QUERY] OpenAI embedding check failed -> {self.embedding_provider_label}"
+            )
+            return
+
+        self._resolve_embedding_provider_key_only()
+
+    def _resolve_embedding_provider_key_only(self):
+        """OpenAI when key validates, else local (used when no ingestion log or IGNORE set)."""
         key = os.getenv("OPENAI_API_KEY", "").strip()
         if not key:
             self._use_openai_embeddings = False
@@ -134,6 +211,10 @@ class FamilyOfficeRAG:
             "(must match ingest embedding model for quality)."
         )
 
+    def embedding_alignment_warning(self) -> str:
+        """Non-fatal notice when query embedding mode was adjusted for index parity."""
+        return self._embedding_warning or ""
+
     def is_database_ready(self) -> bool:
         if self.collection is None:
             return False
@@ -154,7 +235,7 @@ class FamilyOfficeRAG:
         if self._init_error:
             return self._init_error
         if not self.is_database_ready():
-            return "Database empty or missing — run rag_ingest.py first."
+            return "Database empty or missing - run rag_ingest.py first."
         return ""
 
     def get_embedding(self, text: str):

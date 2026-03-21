@@ -95,6 +95,7 @@ rag = load_rag()
 db_ready = rag.is_database_ready()
 db_count = rag.database_count()
 status_msg = rag.init_status_message()
+embed_warn = rag.embedding_alignment_warning()
 
 # Sidebar
 with st.sidebar:
@@ -104,6 +105,9 @@ with st.sidebar:
     else:
         st.metric("Indexed family offices", "N/A")
         st.caption("Index the CSV with: `python rag_ingest.py`")
+
+    if embed_warn:
+        st.warning(embed_warn)
 
     st.metric("Countries covered", "13")
     st.metric("Verified emails (build)", "38")
