@@ -136,7 +136,6 @@ GitHub Actions runs **`python scripts/smoke_rag.py`** on push/PR to **`main`** /
 
 | Doc | Purpose |
 |-----|---------|
-| `docs/FALCON_SUBMISSION_PLAYBOOK.md` | Official brief alignment, checklists |
 | `docs/DATASET_DOCUMENTATION.md` | Methodology, Task 2 RAG §11 |
 | `docs/DATA_DICTIONARY.md` | Column meanings |
 | `docs/TASK4_BUILD_WALKTHROUGH.md` | Task 4 stack, ICP, ascension |
