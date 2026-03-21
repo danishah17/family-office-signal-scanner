@@ -13,8 +13,8 @@
 
 ## Live demos (paste your Streamlit Cloud URLs here)
 
-- **FO Intelligence RAG:** `[YOUR_STREAMLIT_RAG_URL]`
-- **Family Office Signal Scanner:** `https://family-office-signal-scanner-ikpxhsqs7lcqpu2cuy9m8n.streamlit.app/` (change if you redeploy)
+- **FO Intelligence RAG:** `(https://family-office-signal-scanner-qca84q2kzjpp2ubkzfbmqb.streamlit.app/)`
+- **Family Office Signal Scanner:** `(https://family-office-signal-scanner-thcjpggwkooneotztzbihm.streamlit.app/)`
 
 Deploy **two** Streamlit Cloud apps from the **same** GitHub repo with **different** entrypoints (see below).
 
